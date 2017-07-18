@@ -1,0 +1,97 @@
+---
+title: "Practical Machine Learning - Project"
+author: "Rajesh Vikraman"
+date: "July 17, 2017"
+output: html_document
+keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE,warning = FALSE)
+```
+
+## Downloading data sets
+``` {r echo= TRUE, warnings=FALSE }
+library(caret)
+traindata<- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testdata <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+## Exploratory Analysis
+
+The data seems to have many variables with missing data. It is better to remove such variables before building the model.The following codes identifies null values and NA values for each of the 160 variables. 
+
+```{r}
+missingvalues <-colSums(apply(traindata,c(1,2), function(r) any(r %in% c("","#DIV/0!"))))
+NAvalues <- colSums(apply(traindata,c(1,2), is.na))
+totalmiss <- missingvalues+NAvalues
+Colmissing <- unname(totalmiss)
+Trainingsummary <- data.frame(Variablename=colnames(traindata),Nullvalues=missingvalues,NAvalues=NAvalues,Totalinvalid=totalmiss,row.names = c(1:160))
+Trainingsummary <- Trainingsummary[Trainingsummary$Totalinvalid >0,]
+traincleaned<- traindata[,-which(Colmissing>19000)]
+traincleaned <- traincleaned[,-c(1:5)]
+```
+
+The details of 100 variables with invalid values are given below 
+
+
+```{r}
+Trainingsummary
+```
+
+All variables with more than 19,000 invalid values out of 19,622 values are excluded from the dataframe **traincleaned**. We will also exclude the first five variables from the data set as these are personal data
+
+## Fitting the model
+
+We will use the Random Forest model with a 10 fold cross validation resampling method as this has the following advantages.
+
+1. If there is a strong predictor this will always get selected in top split of all trees in a bagging model as a result of which all trees will look similiar. Hence all the prediction will be highly correlated.This will not result in a significant reduction in variance over a single tree. However the Random Forest model select a random subset of predictors at each split in the tree. As a result many of the trees may not even include the strong predictors thereby giving an equal chance to other predictors.Due to this the average of the resulting tree will be less variable and hence more reliable.
+
+2. Using a 10 fold Cross validation will yield a missclassified observation estimate that suffers neither from excessively high bias or high variance.
+
+The cleaned training dataset is split into training and validation data sets to check for out of sample errors.
+
+``` {r message =FALSE, warnings=FALSE}
+set.seed(345)
+inTrain <- createDataPartition(traincleaned$classe,p=0.75,list=FALSE)
+training <- traincleaned[inTrain,]
+validation <- traincleaned[-inTrain,]
+fitControl <- trainControl(method = "cv",number = 10)
+modelfit <- train(classe ~., method="rf",data=training,trControl = fitControl)
+```
+
+## Results
+
+The  model parameters are given below
+
+```{r}
+modelfit
+```
+
+The final model with a mtry value of 28 is as below
+
+```{r}
+modelfit$finalModel
+```
+
+The out of bag estimate error rate is 0.22%  as above. 
+
+To calculate the out of sample error rate we predict the values of *classe* variable in the validation data set and compare it with *classe* values in validation set 
+
+
+```{r}
+pred <- predict(modelfit,validation)
+cm  <- confusionMatrix(pred,validation$classe)
+ooserror <- sum(cm$table[row(cm$table) != col(cm$table)])/sum(cm$table)
+```
+
+The out of sample error rate is `r round(ooserror*100,2)` %
+
+The predicted value for the 20 test cases is as below.
+
+```{r}
+predict(modelfit,testdata)
+```
+
+
+### End of Document
